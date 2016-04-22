@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,7 +17,7 @@ namespace SBox
         static List<string> GetSboxFunctions()
         {
             // read all bytes from sbox
-            var sboxFile = File.ReadAllBytes("sbox.sbx").Where((x, i) => i % 2 == 0).ToList();
+            var sboxFile = File.ReadAllBytes("sbox_08x08_NL86.sbx").Where((x, i) => i % 2 == 0).ToList();
             string[] sboxTab = new string[8];
             for (int i = 0; i < sboxTab.Count(); i++)
             {
@@ -81,24 +81,34 @@ namespace SBox
         /// Generate line functions
         /// </summary>
         /// <returns>List of line functions</returns>
-        static List<string> GeneratebentFunctions()
+        static List<string> GenerateBentFunctions(List<string> sboxList)
         {
             string[] bentFunctionsTab = new string[256];
             int bentFunctionsTabIndex = 8;
-            for (int i = 0; i < bentFunctionsTab.Count(); i++)
-            {
-                bentFunctionsTab[i] = "";
-            }
-
-            //Generate first 8 functions
-            for (int i = 0; i < 256; i++)
-            {
-                var binaryCode = Convert.ToString(i, 2).PadLeft(8, '0');
-                for (int tabElement = 0; tabElement < binaryCode.Count(); tabElement++)
+           
+                for (int i = 0; i < bentFunctionsTab.Count(); i++)
                 {
-                    bentFunctionsTab[tabElement] += binaryCode[tabElement];
+                    bentFunctionsTab[i] = "";
                 }
-            }
+
+                if (sboxList != null) //Take first 8 functions form sbox
+                {
+                    for (int tabElement = 0; tabElement < sboxList.Count(); tabElement++)
+                    {
+                        bentFunctionsTab[tabElement] = sboxList[tabElement];
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < 256; i++)//Generate first 8 functions
+                    {
+                        var binaryCode = Convert.ToString(i, 2).PadLeft(8, '0');
+                        for (int tabElement = 0; tabElement < binaryCode.Count(); tabElement++)
+                        {
+                            bentFunctionsTab[tabElement] += binaryCode[tabElement];
+                        }
+                    }
+                }
 
             //Generate all possible combinations of first 8 bent functions
             var combinations = GetPowerSet(bentFunctionsTab.Take(8).ToList()).Select(subset => string.Join(" ", subset.Select(clr => clr.ToString()).ToArray())).Where(notExist => !bentFunctionsTab.Contains(notExist)).ToList();
@@ -130,14 +140,17 @@ namespace SBox
         /// <returns>Table of nonlinearity</returns>
         static int[] CheckNonlinearity(List<string> sboxList, List<string> bentFunctionsList)
         {
-            var resultTab = new int[8];
+            var resultTab = new int[sboxList.Count()];
             var resultTabIndex = 0;
+            int elementTotal = 0;
+            elementTotal = sboxList.Count() == 256 ? 255 : 256;
             foreach(var sbox in sboxList)
             {
                 resultTab[resultTabIndex] = 256;
-                foreach(var bentFunction in bentFunctionsList)
+                foreach (var bentFunction in bentFunctionsList.Take(elementTotal))
                 {
                     resultTab[resultTabIndex] = Math.Min(resultTab[resultTabIndex], xorStrings(sbox, bentFunction).Count(x => x == '1'));
+                    resultTab[resultTabIndex] = Math.Min(resultTab[resultTabIndex], xorStrings(sbox, bentFunction).Count(x => x == '0'));
                 }
                 resultTabIndex++;
             }
@@ -149,18 +162,24 @@ namespace SBox
             try
             {
                 var sboxList = GetSboxFunctions();
-                var bentFunctionsList = GeneratebentFunctions();
+                var bentFunctionsList = GenerateBentFunctions(null);
                 var resultTab = CheckNonlinearity(sboxList, bentFunctionsList);
-                Console.WriteLine("\n\nRezultat");
+                var sboxFunctionsList = GenerateBentFunctions(sboxList);
+                var resultSboxTab = CheckNonlinearity(sboxFunctionsList, bentFunctionsList);
+                
+                Console.WriteLine("\n\nWynik funkcji");
                 // display results
                 for (int i = 0; i < resultTab.Count(); i++)
                 {
-                    if (resultTab[i] == 110 || resultTab[i] == 112)
+                    if (resultTab[i] == 110 || resultTab[i] == 112 || resultTab[i] == 108)
                         Console.ForegroundColor = ConsoleColor.Green;
                     else
                         Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine("Funkcja {0}. Wyznaczona wartość nieliniowości: {1}", i, resultTab[i]);
                 }
+                Console.ResetColor();
+                Console.WriteLine("\n\nWynik sbox");
+                Console.WriteLine("Wyznaczona wartość nieliniowości sboxa to: {0}", resultSboxTab.Min());
             }
             catch (Exception ex)
             {
